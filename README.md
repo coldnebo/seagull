@@ -2,9 +2,8 @@
 
 A proficiency planner for Part 91 pilots.
 
-See the tool in action here: 
+* 🛩️ [Try it live → coldnebo.github.io/seagull](https://coldnebo.github.io/seagull/)
 
-* https://coldnebo.github.io/seagull/
 
 ## Disclaimer
 
@@ -37,8 +36,7 @@ In addition, can we organize ACS tasks that might be refreshed by chair-flying, 
 
 Can we take this information and build a schedule of training goals for Part 91 pilots interested in maintaining proficiency? Also, let's add a calculator to estimate the total costs of this training schedule.
 
-I don't include CFI/CFII in this analysis because the 
-proficiency isn't separate from training students -- and also I don't know enough about it.
+CFI/CFII ratings are out of scope for now — the proficiency dynamic there is fundamentally different since instruction itself is the currency.
 
 ## My Background
 

@@ -331,7 +331,13 @@ export default function App() {
             <div style={{fontSize:10,color:"#f59e0b",letterSpacing:".15em",marginBottom:3}}>PART 91 PROFICIENCY PLANNER</div>
             <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:18,fontWeight:700,color:"#f1f5f9"}}>ACS Skills × Fade Rate × Training Type</div>
           </div>
-          <div style={{fontSize:10,color:"#334155",letterSpacing:".08em"}}>PPL · IR · CPL · TW · MEL · SEA · GL</div>
+          <div style={{fontSize:10, color:"#334155", letterSpacing:".08em", display:"flex", alignItems:"center", gap:12}}>
+            <span>PPL · IR · CPL · TW · MEL · SEA · GL</span>
+            <a href="https://github.com/coldnebo/seagull" target="_blank" rel="noreferrer"
+              style={{color:"#475569", fontSize:10, border:"1px solid #1e293b", borderRadius:4, padding:"3px 8px", textDecoration:"none", letterSpacing:".05em"}}>
+              ⭐ GitHub
+            </a>
+          </div>
         </div>
       </div>
 
