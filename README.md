@@ -2,6 +2,10 @@
 
 A proficiency planner for Part 91 pilots.
 
+See the tool in action here: 
+
+* https://coldnebo.github.io/seagull/
+
 ## Disclaimer
 
 This application is an independent, community-developed reference tool and is not affiliated with, endorsed by, or approved by the Federal Aviation Administration (FAA) or any other aviation authority. It is not official training material, a substitute for FAA-approved instruction, or a legal interpretation of any regulation or standard.
