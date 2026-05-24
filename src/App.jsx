@@ -279,20 +279,73 @@ export default function App() {
     };
   }, [activeTasks, wetRate, simRate]);
 
-  // Schedule
+  // Schedule — block-based, staggered evenly across the year
+  // A "block" is a bookable training unit: ~2hr real flight, ~1hr sim, or ~0.5hr chair session
+  // Tasks are grouped by type+fade, then spread across months with per-group offsets to avoid clustering
+  const BLOCK_DURATION = { real: 2.0, "sim-ok": 1.0, "chair-ok": 0.5 }; // hrs per block
+  const BLOCK_CAP      = { real: 2.0, "sim-ok": 1.0, "chair-ok": 0.5 }; // max hrs per block before splitting
+
   const schedule = useMemo(() => {
-    const months = Array.from({length:12}, (_,i) => ({
-      month:i+1, label:["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][i],
-      real:[], sim:[], chair:[]
-    }));
-    activeTasks.forEach(t => {
-      const freq = FADE_CONFIG[t.fadeRate].freqPerYear;
-      const interval = Math.max(1, Math.round(12/freq));
-      for(let m=0; m<12; m+=interval) {
-        const b = t.trainingType === "real" ? "real" : t.trainingType === "sim-ok" ? "sim" : "chair";
-        if(months[m]) months[m][b].push(t.task);
-      }
+    const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const months = Array.from({length:12}, (_,i) => ({ month:i+1, label:MONTH_LABELS[i], blocks:[] }));
+
+    // Group tasks by trainingType × fadeRate
+    const groups = {};
+    activeTasks.forEach(tk => {
+      const key = `${tk.trainingType}|${tk.fadeRate}`;
+      if(!groups[key]) groups[key] = { trainingType:tk.trainingType, fadeRate:tk.fadeRate, tasks:[] };
+      groups[key].tasks.push(tk);
     });
+
+    // For each group, generate blocks and stagger their start month
+    let groupIndex = 0;
+    Object.values(groups).forEach(g => {
+      const freq     = FADE_CONFIG[g.fadeRate].freqPerYear;
+      const interval = Math.max(1, Math.round(12 / freq));
+      const blockCap = BLOCK_CAP[g.trainingType] * 60; // in minutes
+      const durMin   = BLOCK_DURATION[g.trainingType] * 60;
+
+      // Stagger start month by group index to spread load
+      const offset = groupIndex % interval;
+      groupIndex++;
+
+      // Pack tasks into blocks of ~blockCap minutes
+      const blocks = [];
+      let current = { tasks:[], minutes:0 };
+      g.tasks.forEach(tk => {
+        if(current.minutes + tk.estMinutes > blockCap && current.tasks.length > 0) {
+          blocks.push({...current});
+          current = { tasks:[], minutes:0 };
+        }
+        current.tasks.push(tk.task);
+        current.minutes += tk.estMinutes;
+      });
+      if(current.tasks.length > 0) blocks.push(current);
+
+      // Place blocks into months using staggered offset
+      blocks.forEach((block, bi) => {
+        for(let occurrence=0; occurrence < freq; occurrence++) {
+          const monthIdx = (offset + occurrence * interval + bi) % 12;
+          months[monthIdx].blocks.push({
+            trainingType: g.trainingType,
+            fadeRate:     g.fadeRate,
+            tasks:        block.tasks,
+            hours:        Math.max(0.5, block.minutes / 60),
+          });
+        }
+      });
+    });
+
+    // Sort blocks within each month: real first, then sim, then chair
+    const typeOrder = { real:0, "sim-ok":1, "chair-ok":2 };
+    months.forEach(m => {
+      m.blocks.sort((a,b) => typeOrder[a.trainingType] - typeOrder[b.trainingType]);
+      // Compute total hours per type for summary
+      m.realHrs  = m.blocks.filter(b=>b.trainingType==="real").reduce((s,b)=>s+b.hours,0);
+      m.simHrs   = m.blocks.filter(b=>b.trainingType==="sim-ok").reduce((s,b)=>s+b.hours,0);
+      m.chairHrs = m.blocks.filter(b=>b.trainingType==="chair-ok").reduce((s,b)=>s+b.hours,0);
+    });
+
     return months;
   }, [activeTasks]);
 
@@ -331,10 +384,10 @@ export default function App() {
             <div style={{fontSize:10,color:"#f59e0b",letterSpacing:".15em",marginBottom:3}}>PART 91 PROFICIENCY PLANNER</div>
             <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:18,fontWeight:700,color:"#f1f5f9"}}>ACS Skills × Fade Rate × Training Type</div>
           </div>
-          <div style={{fontSize:10, color:"#334155", letterSpacing:".08em", display:"flex", alignItems:"center", gap:12}}>
-            <span>PPL · IR · CPL · TW · MEL · SEA · GL</span>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:10,color:"#334155",letterSpacing:".08em"}}>PPL · IR · CPL · TW · MEL · SEA · GL</span>
             <a href="https://github.com/coldnebo/seagull" target="_blank" rel="noreferrer"
-              style={{color:"#475569", fontSize:10, border:"1px solid #1e293b", borderRadius:4, padding:"3px 8px", textDecoration:"none", letterSpacing:".05em"}}>
+              style={{fontSize:10,color:"#475569",border:"1px solid #1e293b",borderRadius:4,padding:"3px 8px",textDecoration:"none",letterSpacing:".05em"}}>
               ⭐ GitHub
             </a>
           </div>
@@ -457,33 +510,83 @@ export default function App() {
             {/* ══ SCHEDULE ══ */}
             {viewMode === "schedule" && (
               <div>
-                <div style={{marginBottom:16}}>
-                  <div style={{fontSize:12,color:"#94a3b8",marginBottom:10,lineHeight:1.7}}>
-                    Recommended minimum proficiency events by month. Bundle real-aircraft events — a 1.5-hr flight can cover multiple tasks from the same fade tier.
+                {/* Legend */}
+                <div style={{marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+                  <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.6}}>
+                    Each card = one bookable training block. Tasks are spread evenly across the year by fade rate.
                   </div>
-                  <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-                    {[{c:"#ef4444",l:"✈️ Real aircraft"},{c:"#3b82f6",l:"🖥️ Sim / BATD"},{c:"#22c55e",l:"📋 Chair / study"}].map(l=>(
-                      <div key={l.l} style={{display:"flex",alignItems:"center",gap:7,fontSize:10,color:"#94a3b8"}}>
-                        <div style={{width:9,height:9,borderRadius:2,background:l.c,opacity:.7}}/>
-                        {l.l}
+                  <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                    {[
+                      {c:"#ef4444",i:"✈️",l:"Real A/C (~2 hr block)"},
+                      {c:"#3b82f6",i:"🖥️",l:"Sim / BATD (~1 hr)"},
+                      {c:"#22c55e",i:"📋",l:"Chair / Study (~30 min)"},
+                    ].map(l=>(
+                      <div key={l.l} style={{display:"flex",alignItems:"center",gap:6,fontSize:10,color:"#94a3b8"}}>
+                        <div style={{width:9,height:9,borderRadius:2,background:l.c,opacity:.8}}/>
+                        {l.i} {l.l}
                       </div>
                     ))}
                   </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-                  {schedule.map(m=>(
-                    <div key={m.month} className="mc">
-                      <div style={{fontSize:10,color:"#f59e0b",letterSpacing:".1em",marginBottom:7,fontWeight:500}}>{m.label}</div>
-                      {m.real.length===0&&m.sim.length===0&&m.chair.length===0&&<div style={{fontSize:9,color:"#334155"}}>Light month</div>}
-                      {m.real.map((e,i)=><div key={i} className="ev" style={{borderLeftColor:"#ef4444"}}>{e}</div>)}
-                      {m.sim.map((e,i)=><div key={i} className="ev" style={{borderLeftColor:"#3b82f6"}}>{e}</div>)}
-                      {m.chair.map((e,i)=><div key={i} className="ev" style={{borderLeftColor:"#22c55e"}}>{e}</div>)}
-                    </div>
-                  ))}
+
+                {/* Month grid */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                  {schedule.map(m => {
+                    const totalHrs = (m.realHrs + m.simHrs + m.chairHrs).toFixed(1);
+                    return (
+                      <div key={m.month} style={{background:"#0a0e14",border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
+                        {/* Month header */}
+                        <div style={{background:"#0f1923",padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #1e293b"}}>
+                          <span style={{fontSize:11,color:"#f59e0b",fontWeight:500,letterSpacing:".1em"}}>{m.label}</span>
+                          {m.blocks.length > 0
+                            ? <span style={{fontSize:9,color:"#475569"}}>{totalHrs} hrs</span>
+                            : <span style={{fontSize:9,color:"#334155"}}>light</span>
+                          }
+                        </div>
+
+                        {/* Hour bar */}
+                        {m.blocks.length > 0 && (
+                          <div style={{display:"flex",height:4,gap:1,padding:"0 2px",marginTop:2,marginBottom:2}}>
+                            {m.realHrs  > 0 && <div style={{flex:m.realHrs,  background:"#ef4444",borderRadius:2,opacity:.7}}/>}
+                            {m.simHrs   > 0 && <div style={{flex:m.simHrs,   background:"#3b82f6",borderRadius:2,opacity:.7}}/>}
+                            {m.chairHrs > 0 && <div style={{flex:m.chairHrs, background:"#22c55e",borderRadius:2,opacity:.7}}/>}
+                          </div>
+                        )}
+
+                        {/* Blocks */}
+                        <div style={{padding:"6px 8px",display:"flex",flexDirection:"column",gap:6}}>
+                          {m.blocks.length === 0 && (
+                            <div style={{fontSize:9,color:"#334155",padding:"4px 0"}}>No sessions this month</div>
+                          )}
+                          {m.blocks.map((block, bi) => {
+                            const typeColor = block.trainingType==="real" ? "#ef4444" : block.trainingType==="sim-ok" ? "#3b82f6" : "#22c55e";
+                            const typeIcon  = block.trainingType==="real" ? "✈️" : block.trainingType==="sim-ok" ? "🖥️" : "📋";
+                            const fc = FADE_CONFIG[block.fadeRate];
+                            return (
+                              <div key={bi} style={{background:"#0f1923",border:`1px solid ${typeColor}22`,borderLeft:`3px solid ${typeColor}`,borderRadius:5,padding:"7px 8px"}}>
+                                {/* Block header */}
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                                  <span style={{fontSize:10,color:typeColor}}>{typeIcon} {block.hours.toFixed(1)} hr block</span>
+                                  <span className="chip" style={{background:`${fc.color}18`,color:fc.color,border:`1px solid ${fc.color}33`,fontSize:9,padding:"1px 5px"}}>{fc.label}</span>
+                                </div>
+                                {/* Task list */}
+                                {block.tasks.map((task,ti)=>(
+                                  <div key={ti} style={{fontSize:9,color:"#64748b",lineHeight:1.5,paddingLeft:4,borderLeft:`1px solid ${typeColor}33`,marginBottom:2}}>
+                                    {task}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div style={{marginTop:16,background:"#0f1923",border:"1px solid #1e293b",borderRadius:8,padding:14,fontSize:11,color:"#64748b",lineHeight:1.8}}>
+
+                <div style={{marginTop:14,background:"#0f1923",border:"1px solid #1e293b",borderRadius:8,padding:14,fontSize:11,color:"#64748b",lineHeight:1.8}}>
                   <span style={{color:"#f59e0b"}}>TIP: </span>
-                  A well-planned 1.5-hr flight can cover all tasks in the same fade tier. Keep a personal logbook column for each ACS task practiced — this lets you spot which skills haven't been touched recently.
+                  Each block maps to a typical rental unit — ~2 hr for real aircraft, ~1 hr for sim. The colored bar at the top of each month shows the ratio of real vs sim vs chair time at a glance. Tasks within a block share the same fade rate and training type, so they bundle naturally into one session.
                 </div>
               </div>
             )}
@@ -601,16 +704,6 @@ export default function App() {
                   The aviation-specific literature (EASA/FAA 2021, Hendrickson et al. 2006) provides the strongest direct evidence. 
                   Per-task fade rates for endorsement areas (tailwheel, seaplane, glider) are interpolated from general skill-fade principles and the FAA Airplane Flying Handbook guidance on perishability of motor skills.
                   All regulatory currency requirements are drawn directly from 14 CFR Part 61 and the respective ACS documents.
-                </div>
-                <div style={{marginTop:12, background:"#0f1923", border:"1px solid #7f1d1d", borderRadius:8, padding:14}}>
-                  <div style={{fontSize:9, color:"#ef4444", letterSpacing:".1em", marginBottom:8}}>DISCLAIMER</div>
-                  <div style={{fontSize:11, color:"#64748b", lineHeight:1.9}}>
-                    This application is an independent, community-developed reference tool and is <strong style={{color:"#94a3b8"}}>not affiliated with, endorsed by, or approved by the Federal Aviation Administration (FAA)</strong> or any other aviation authority. It is not official training material, a substitute for FAA-approved instruction, or a legal interpretation of any regulation or standard.
-                    <br/><br/>
-                    Fade rate estimates and training type recommendations are synthesized from published research and represent the authors' best judgment — they are not empirically validated for every task or aircraft type. All information should be independently verified with a qualified flight instructor (CFI) and the applicable FAA Airman Certification Standards (ACS), Advisory Circulars, and 14 CFR regulations before use in any training context.
-                    <br/><br/>
-                    Flying involves risk. Nothing in this tool substitutes for sound aeronautical judgment, proper instruction, and compliance with applicable regulations. Always consult a CFI.
-                  </div>
                 </div>
               </div>
             )}
