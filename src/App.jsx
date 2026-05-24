@@ -596,6 +596,16 @@ export default function App() {
                   Per-task fade rates for endorsement areas (tailwheel, seaplane, glider) are interpolated from general skill-fade principles and the FAA Airplane Flying Handbook guidance on perishability of motor skills.
                   All regulatory currency requirements are drawn directly from 14 CFR Part 61 and the respective ACS documents.
                 </div>
+                <div style={{marginTop:12, background:"#0f1923", border:"1px solid #7f1d1d", borderRadius:8, padding:14}}>
+                  <div style={{fontSize:9, color:"#ef4444", letterSpacing:".1em", marginBottom:8}}>DISCLAIMER</div>
+                  <div style={{fontSize:11, color:"#64748b", lineHeight:1.9}}>
+                    This application is an independent, community-developed reference tool and is <strong style={{color:"#94a3b8"}}>not affiliated with, endorsed by, or approved by the Federal Aviation Administration (FAA)</strong> or any other aviation authority. It is not official training material, a substitute for FAA-approved instruction, or a legal interpretation of any regulation or standard.
+                    <br/><br/>
+                    Fade rate estimates and training type recommendations are synthesized from published research and represent the authors' best judgment — they are not empirically validated for every task or aircraft type. All information should be independently verified with a qualified flight instructor (CFI) and the applicable FAA Airman Certification Standards (ACS), Advisory Circulars, and 14 CFR regulations before use in any training context.
+                    <br/><br/>
+                    Flying involves risk. Nothing in this tool substitutes for sound aeronautical judgment, proper instruction, and compliance with applicable regulations. Always consult a CFI.
+                  </div>
+                </div>
               </div>
             )}
 
